@@ -104,27 +104,27 @@ async function main() {
       // Lấy F5:K6
       const rangeRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!F5:J6`
+        range: `${sheetName}!F5:K6`
       });
       const values = rangeRes.data.values || [];
       const f5 = values[0]?.[0] || '';
-      const i5 = values[0]?.[4] || '';
-      const j5 = values[0]?.[5] || '';
-      const j6 = values[1]?.[5] || '';
-      if (!j6) { console.log(`⚠️ Sheet "${sheetName}" j6 trống — bỏ qua`); continue; }
-      const captionText = `${f5}    ${i5}    ${j5}`;
+      const j5 = values[0]?.[4] || '';
+      const k5 = values[0]?.[5] || '';
+      const k6 = values[1]?.[5] || '';
+      if (!k6) { console.log(`⚠️ Sheet "${sheetName}" K6 trống — bỏ qua`); continue; }
+      const captionText = `${f5}    ${j5}    ${k5}`;
 
       // Last row col K
       const colRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!J1:J2000`
+        range: `${sheetName}!K1:K2000`
       });
       const colVals = colRes.data.values || [];
       let lastRow = 1;
       for (let i = colVals.length - 1; i >= 0; i--) {
         if (colVals[i]?.[0]) { lastRow = i + 1; break; }
       }
-      console.log('Last row detected (col J):', lastRow);
+      console.log('Last row detected (col K):', lastRow);
 
       // build chunks
       let chunks = [];
