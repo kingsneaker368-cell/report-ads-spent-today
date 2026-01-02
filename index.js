@@ -84,10 +84,10 @@ async function main() {
       if (!sheetInfo) continue;
       const gid = sheetInfo.properties.sheetId;
 
-      // === TIÊU ĐỀ F → I ===
+      // === TIÊU ĐỀ F → J ===
       const headerRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!F5:I5`
+        range: `${sheetName}!F5:J5`
       });
 
       const headerVals = headerRes.data.values?.[0] || [];
