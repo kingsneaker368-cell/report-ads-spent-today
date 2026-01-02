@@ -117,14 +117,14 @@ async function main() {
       // Last row col K
       const colRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${sheetName}!K1:K2000`
+        range: `${sheetName}!J1:J2000`
       });
       const colVals = colRes.data.values || [];
       let lastRow = 1;
       for (let i = colVals.length - 1; i >= 0; i--) {
         if (colVals[i]?.[0]) { lastRow = i + 1; break; }
       }
-      console.log('Last row detected (col K):', lastRow);
+      console.log('Last row detected (col J):', lastRow);
 
       // build chunks
       let chunks = [];
