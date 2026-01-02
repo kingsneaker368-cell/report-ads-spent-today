@@ -8,7 +8,7 @@ const FormData = require('form-data');
 const { google } = require('googleapis');
 const sharp = require('sharp');
 
-// === chống Google 429: retry 5 lần ===
+// ===== Retry Google 429 =====
 async function fetchPdfWithRetry(url, headers, attempt = 1) {
   try {
     return await axios.get(url, {
@@ -28,7 +28,7 @@ async function fetchPdfWithRetry(url, headers, attempt = 1) {
   }
 }
 
-// Convert PDF → PNG + trim
+// ===== PDF → PNG + trim =====
 function convertPdfToPng(pdfPath, outPrefix) {
   return new Promise((resolve, reject) => {
     execFile(
@@ -41,8 +41,8 @@ function convertPdfToPng(pdfPath, outPrefix) {
 
         try {
           const img = sharp(pngPath);
-          const trimmedBuffer = await img.trim().toBuffer();
-          await fs.promises.writeFile(pngPath, trimmedBuffer);
+          const trimmed = await img.trim().toBuffer();
+          await fs.promises.writeFile(pngPath, trimmed);
           resolve(pngPath);
         } catch (e) {
           reject(e);
@@ -56,7 +56,60 @@ async function main() {
   try {
     const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
     const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-    const SHEET_NAMES = (process.env.SHEET_NAMES || '').split(',').map(s => s.trim()).filter(Boolean);
-    const START_COL = process.env.START_COL || 'F';
-    const END_COL = process.env.END_COL || 'AD';
-    const MAX_ROWS_PER_FILE = Number(proces_
+    const SHEET_NAMES = (process.env.SHEET_NAMES || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const START_COL = 'F';
+    const END_COL = 'AD';
+    const MAX_ROWS_PER_FILE = Number(process.env.MAX_ROWS_PER_FILE || '40');
+
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+    if (!serviceAccountJson) throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON');
+
+    const auth = new google.auth.GoogleAuth({
+      credentials: JSON.parse(serviceAccountJson),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+    console.log(`📄 Loaded metadata for ${meta.data.sheets.length} sheets`);
+
+    for (const sheetName of SHEET_NAMES) {
+      console.log(`--- Processing sheet: ${sheetName}`);
+
+      // ===== LẤY CAPTION A + B =====
+      const captionRes = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetName}!A4:B20`
+      });
+
+      const captionText = (captionRes.data.values || [])
+        .map(r => r.filter(Boolean).join(' '))
+        .filter(Boolean)
+        .join('\n');
+
+      // ===== LẤY DATA F → AD =====
+      const dataRes = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetName}!${START_COL}1:${END_COL}`
+      });
+
+      const rows = dataRes.data.values || [];
+      if (rows.length < 2) continue;
+
+      const header = rows[0].slice(0, 4); // F → I
+      const body = rows.slice(1);
+
+      console.log(`➡ Export PDF for ${body.length} rows`);
+
+      const images = [];
+      let isFirstImage = true;
+
+      for (let i = 0; i < body.length; i += MAX_ROWS_PER_FILE) {
+        const chunk = body.slice(i, i + MAX_ROWS_PER_FILE);
