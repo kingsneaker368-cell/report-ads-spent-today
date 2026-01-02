@@ -31,20 +31,24 @@ async function fetchPdfWithRetry(url, headers, attempt = 1) {
 // Convert PDF → PNG + trim
 function convertPdfToPng(pdfPath, outPrefix) {
   return new Promise((resolve, reject) => {
-    execFile('pdftoppm', ['-png', '-singlefile', '-r', '150', pdfPath, outPrefix], async (err) => {
-      if (err) return reject(err);
-      const pngPath = outPrefix + '.png';
-      if (!fs.existsSync(pngPath)) return reject(new Error('PNG conversion failed'));
+    execFile(
+      'pdftoppm',
+      ['-png', '-singlefile', '-r', '150', pdfPath, outPrefix],
+      async (err) => {
+        if (err) return reject(err);
+        const pngPath = outPrefix + '.png';
+        if (!fs.existsSync(pngPath)) return reject(new Error('PNG conversion failed'));
 
-      try {
-        const img = sharp(pngPath);
-        const trimmedBuffer = await img.trim().toBuffer();
-        await fs.promises.writeFile(pngPath, trimmedBuffer);
-        resolve(pngPath);
-      } catch (e) {
-        reject(e);
+        try {
+          const img = sharp(pngPath);
+          const trimmedBuffer = await img.trim().toBuffer();
+          await fs.promises.writeFile(pngPath, trimmedBuffer);
+          resolve(pngPath);
+        } catch (e) {
+          reject(e);
+        }
       }
-    });
+    );
   });
 }
 
@@ -70,7 +74,10 @@ async function main() {
       creds.client_email,
       null,
       creds.private_key,
-      ['https://www.googleapis.com/auth/drive.readonly','https://www.googleapis.com/auth/spreadsheets.readonly']
+      [
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/spreadsheets.readonly'
+      ]
     );
     await jwtClient.authorize();
     const accessToken = (await jwtClient.getAccessToken())?.token;
@@ -90,15 +97,21 @@ async function main() {
       if (!sheetInfo) continue;
       const gid = sheetInfo.properties.sheetId;
 
-      // ===== CAPTION CŨ =====
+      // ===== TIÊU ĐỀ CŨ: CHỈ LẤY F → I =====
       const headerRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!F5:K6`
       });
       const hVals = headerRes.data.values || [];
-      const captionText = `${hVals[0]?.[0] || ''}    ${hVals[0]?.[4] || ''}    ${hVals[0]?.[5] || ''}`;
 
-      // ===== TEXT MỚI: CỘT A & B =====
+      const captionText = [
+        hVals[0]?.[0], // F
+        hVals[0]?.[1], // G
+        hVals[0]?.[2], // H
+        hVals[0]?.[3]  // I
+      ].filter(Boolean).join('    ');
+
+      // ===== TEXT CHÚ THÍCH: CỘT A & B =====
       const abRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!A4:B20`
@@ -109,7 +122,7 @@ async function main() {
         .filter(Boolean)
         .join('\n');
 
-      // ===== LAST ROW =====
+      // ===== LAST ROW (COL K) =====
       const colRes = await sheetsApi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!K1:K2000`
@@ -117,12 +130,19 @@ async function main() {
       const colVals = colRes.data.values || [];
       let lastRow = 1;
       for (let i = colVals.length - 1; i >= 0; i--) {
-        if (colVals[i]?.[0]) { lastRow = i + 1; break; }
+        if (colVals[i]?.[0]) {
+          lastRow = i + 1;
+          break;
+        }
       }
 
-      let chunks = [];
+      // ===== BUILD CHUNKS =====
+      const chunks = [];
       for (let r = 1; r <= lastRow; r += MAX_ROWS_PER_FILE) {
-        chunks.push({ startRow: r, endRow: Math.min(r + MAX_ROWS_PER_FILE - 1, lastRow) });
+        chunks.push({
+          startRow: r,
+          endRow: Math.min(r + MAX_ROWS_PER_FILE - 1, lastRow)
+        });
       }
 
       const albumImages = [];
@@ -134,26 +154,33 @@ async function main() {
           `&portrait=false&size=A4&fitw=true&sheetnames=false&printtitle=false&pagenumbers=false` +
           `&gridlines=false&fzr=false&gid=${gid}&range=${encodeURIComponent(rangeParam)}`;
 
-        const pdfResp = await fetchPdfWithRetry(exportUrl, { Authorization: `Bearer ${accessToken}` });
+        const pdfResp = await fetchPdfWithRetry(exportUrl, {
+          Authorization: `Bearer ${accessToken}`
+        });
+
         const pdfPath = path.join(tmpDir, `${sheetName}_${chunk.startRow}-${chunk.endRow}.pdf`);
         fs.writeFileSync(pdfPath, Buffer.from(pdfResp.data));
 
         const pngPath = await convertPdfToPng(pdfPath, pdfPath.replace('.pdf', ''));
-        albumImages.push({ path: pngPath, fileName: path.basename(pngPath) });
+        albumImages.push({
+          path: pngPath,
+          fileName: path.basename(pngPath)
+        });
       }
 
       // ===== SEND ALBUM =====
       const form = new FormData();
       form.append('chat_id', TELEGRAM_CHAT_ID);
-
-      form.append('media', JSON.stringify(
-        albumImages.map((img, i) => ({
-          type: 'photo',
-          media: `attach://${img.fileName}`,
-          caption: i === 0 ? captionText : undefined
-        }))
-      ));
-
+      form.append(
+        'media',
+        JSON.stringify(
+          albumImages.map((img, i) => ({
+            type: 'photo',
+            media: `attach://${img.fileName}`,
+            caption: i === 0 ? captionText : undefined
+          }))
+        )
+      );
       albumImages.forEach(img => form.append(img.fileName, fs.createReadStream(img.path)));
 
       await axios.post(
@@ -162,7 +189,7 @@ async function main() {
         { headers: form.getHeaders() }
       );
 
-      // ===== SEND TEXT CHÚ THÍCH =====
+      // ===== SEND TEXT =====
       if (extraText) {
         await axios.post(
           `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -177,7 +204,7 @@ async function main() {
     }
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
-    console.log('🎉 DONE ALL');
+    console.log('🎉 All sheets processed successfully');
   } catch (err) {
     console.error('ERROR:', err?.message || err);
     process.exit(1);
