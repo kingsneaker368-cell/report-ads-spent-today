@@ -52,7 +52,7 @@ async function main() {
   try {
     const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
     const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-    const SHEET_NAMES = (process.env.SHEET_NAMES || 'Ladi,Mydu').split(',').map(s => s.trim()).filter(Boolean);
+    const SHEET_NAMES = (process.env.SHEET_NAMES || 'Reportdoanhsotoday').split(',').map(s => s.trim()).filter(Boolean);
     const START_COL = process.env.START_COL || 'F';
     const END_COL = process.env.END_COL || 'AD';
     const MAX_ROWS_PER_FILE = Number(process.env.MAX_ROWS_PER_FILE || '40');
