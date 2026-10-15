@@ -1,11 +1,21 @@
-name: Export Sheets to Telegram (manual)
+name: Export Sheets to Telegram (scheduled and manual)
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [report-capture-auto, report-capture-manual]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event.repository.name }}-report-capture
+  cancel-in-progress: false
 
 jobs:
   export:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repo
@@ -34,4 +44,14 @@ jobs:
           MAX_ROWS_PER_FILE: ${{ secrets.MAX_ROWS_PER_FILE }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: node index.js
+          CAPTURE_TRIGGER: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'report-capture-auto' && 'auto' || 'manual' }}
+          CAPTURE_SCHEDULE_DATE: ${{ github.event.client_payload.scheduleDate || '' }}
+          CAPTURE_SCHEDULE_TIME: ${{ github.event.client_payload.scheduleTime || '' }}
+          CAPTURE_TIME_ZONE: ${{ github.event.client_payload.timeZone || 'Asia/Ho_Chi_Minh' }}
+          TZ: ${{ github.event.client_payload.timeZone || 'Asia/Ho_Chi_Minh' }}
+        run: |
+          echo "Capture trigger: $CAPTURE_TRIGGER"
+          if [ -n "$CAPTURE_SCHEDULE_DATE" ] && [ -n "$CAPTURE_SCHEDULE_TIME" ]; then
+            echo "Scheduled slot: $CAPTURE_SCHEDULE_DATE $CAPTURE_SCHEDULE_TIME ($CAPTURE_TIME_ZONE)"
+          fi
+          node index.js
